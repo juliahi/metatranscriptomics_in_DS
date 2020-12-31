@@ -1,0 +1,237 @@
+include: "../config.py"
+
+rule all:
+    input:
+        OUTDIR+"/summary.txt"
+
+rule velveth:
+    input:
+        expand(INDIR+"/{sample}{suffix}", sample=SAMPLES, suffix=[SUFFIX1, SUFFIX2])
+    output:
+        OUTDIR+"/velvet_{K}/Sequences",
+        OUTDIR+"/velvet_{K}/Roadmaps",
+        OUTDIR+"/velvet_{K}/Graph2",
+        stats=OUTDIR+"/velvet_{K}/stats.txt",
+    shell:
+        VELVETDIR+"velveth "+ OUTDIR+"/velvet_{K} {K} -fastq -shortPaired " +
+        "-separate {input} > {output.stats} "
+
+rule velvetg:
+    input:
+        OUTDIR+"/velvet_{K}/Sequences",
+        OUTDIR+"/velvet_{K}/Roadmaps",
+    output:
+        stats=OUTDIR+"/velvet_{K}/stats.txt",
+        fa=OUTDIR+"/velvet_{K}/contigs.fa",
+        fa2=OUTDIR+"/velvet_{K}/long_contigs_"+str(MINCONTIGLENGTH)+".fa",
+    shell:
+        VELVETDIR+"velvetg " + OUTDIR+"/velvet_{K} -cov_cutoff 5 -ins_length 200 " +
+        "-exp_cov 2  >> {output.stats}; "
+        "python2 select_contigs.py {output.fa} {output.fa2} " + str(MINCONTIGLENGTH)
+# rule filter_velvet:
+#     input:
+#         OUTDIR+"/{velvet_{K}/contigs.fa"
+#     output:
+#         fa=OUTDIR+"/velvet_{K}/long_contigs_"+str(MINCONTIGLENGTH)+".fa",
+#         stats=OUTDIR+"/velvet_{K}/longcontigs_stats.txt",
+#         hist=OUTDIR+"/velvet_{K}/longcontigs_hist.pdf",
+#         summary=OUTDIR+"/velvet_{K}/summary.txt"
+#     shell:
+#         "python2 select_contigs.py {input} {output.fa} " + str(MINCONTIGLENGTH) +
+#         " && " +
+#         "python2 get_seqlengths_from_fasta.py {output.fa} {output.stats} && " +
+#         "python2 summarize_assemblies.py {input.stats} 1 >> {output.summary} && " +
+#         "python2 after_velvet.py -i {output.stats} -o {output.hist} -c 1 >> {output.summary}"
+
+rule filter_contigs:
+    input:
+        OUTDIR+"/{folder}/long_contigs_"+str(MINCONTIGLENGTH)+".fa",
+    output:
+        stats=OUTDIR+"/{folder}/longcontigs_stats.txt",
+        hist=OUTDIR+"/{folder}/longcontigs_hist.pdf",
+        summary=OUTDIR+"/{folder}/summary.txt"
+    shell:
+        "python2 get_seqlengths_from_fasta.py {input} {output.stats} && " +
+        "python2 summarize_assemblies.py {output.stats} 1 >> {output.summary} && " +
+        "python2 after_velvet.py -i {output.stats} -o {output.hist} -c 1 >> {output.summary}"
+
+rule oases_k:
+    input:
+        f1=OUTDIR+"/velvet_{K1}/Sequences",
+        f2=OUTDIR+"/velvet_{K1}/Roadmaps"
+    output:
+        f1=temp(OUTDIR+"/oases_{K1}/Sequences"),
+        f2=temp(OUTDIR+"/oases_{K1}/Roadmaps"),
+        t1=OUTDIR+"/oases_{K1}/transcripts.fa"
+    log:
+        OUTDIR+"/oases_{K1}/logging.txt"
+    shell:
+        "cp {input.f1} {output.f1}; cp {input.f2} {output.f2}; " +
+        VELVETDIR+"velvetg " + OUTDIR+"/oases_{wildcards.K1} -read_trkg yes >> {log} "
+
+rule oases_filter:
+    input:
+        OUTDIR+"/oases_{K1}/transcripts.fa",
+    output:
+        OUTDIR+"/oases_{K1}/transcripts_{MAXLEN}.fa"
+    shell:
+        "python2 filter_transcripts.py {input} {output} {wildcards.MAXLEN}"
+
+rule oases:
+    input:
+        expand(OUTDIR+"/oases_{K}/transcripts_{MAXLEN}.fa", K=[21,31], MAXLEN=[32000])
+    output:
+        tr=OUTDIR+"/oases/transcripts.fa",
+        cont=OUTDIR+"/oases/long_contigs_"+str(MINCONTIGLENGTH)+".fa",
+    log:
+        OUTDIR+"/oases/logging.txt"
+    shell:
+        VELVETDIR+"velveth " + OUTDIR+"/oases 25 -long {input} >> {log} && " +
+        VELVETDIR+"velvetg " + OUTDIR+"/oases 25 -read_trkg yes -conserveLong yes >> {log} && " +
+        OASESDIR+"/oases " + OUTDIR+"/oases  -merge yes >> {log} && " +
+        "python2 select_contigs.py {output.tr} {output.cont} " + str(MINCONTIGLENGTH)
+
+
+rule metavelvet:
+    input:
+        OUTDIR+"/velvet_{K}/Sequences",
+        OUTDIR+"/velvet_{K}/Graph2",
+        OUTDIR+"/velvet_{K}/Roadmaps"
+    output:
+        #f1=temp(OUTDIR+"/metavelvet_{K}/Sequences"),
+        #f2=temp(OUTDIR+"/metavelvet_{K}/Roadmaps"),
+        tr=OUTDIR+"/metavelvet_{K}/meta-velvetg.contigs.fa",
+        cont=OUTDIR+"/metavelvet_{K}/long_contigs_"+str(MINCONTIGLENGTH)+".fa",
+        #kmers=OUTDIR+"/metavelvet_{K}/kmer_hists_{K}.pdf
+    log:
+        OUTDIR+"/metavelvet_{K}/logging.txt"
+    shell:
+        VELVETDIR+"/velvetg "+OUTDIR+"/metavelvet_{wildcards.K}/ "+
+        "-exp_cov auto >> {log} && "+
+        METAVELVETDIR+"/meta-velvetg " + OUTDIR+"metavelvet_{wildcards.K} && " +
+        "python2 select_contigs.py {output.tr} {output.cont} " + str(MINCONTIGLENGTH)
+        # TODO: ADD THIS SCRIPT + " && " +
+        #"Rscript velvet_kmer_distr.R "+OUTDIR+
+        #"/metavelvet_{wildcards.K}/meta-velvetg.Graph2-stats.txt {output.kmers} "
+
+rule megahit:
+    input:
+        r1=expand(INDIR+"/{sample}{suffix}", sample=SAMPLES, suffix=[SUFFIX1, SUFFIX2])
+    output:
+        cont=OUTDIR+"/megahit_results/long_contigs_"+str(MINCONTIGLENGTH)+".fa",
+        scaf=OUTDIR+"/megahit_results/final.contigs.fa",
+    log:
+        OUTDIR+"/megahit_results/logging.txt"
+    shell:
+        MEGAHITDIR+"/megahit -o " + OUTDIR + "/megahit -1 {input.r1} -2 {input.r2} " +
+        "-m 0.5 -t 12 > AME.txt 2> {log} > {log} && " +
+        "python2 select_contigs.py {output.scaf} {output.cont} " + str(MINCONTIGLENGTH)
+
+rule idbaud:
+    input:
+        OUTDIR+"/sga/preprocessed.fq"
+    output:
+        allfa=temp(OUTDIR+"/all_reads.fa"),
+        cont=OUTDIR+"/idba_ud/long_contigs_"+str(MINCONTIGLENGTH)+".fa",
+        scaf=OUTDIR+"/idba_ud/scaffold.fa",
+    log:
+        OUTDIR+"/idba_ud/log.txt"
+    shell:
+        IDBADIR+"/fq2fa --paired {input} {output.allfa} && " +
+        IDBADIR+"/idba_ud -r {output.allfa} -o "+OUTDIR+"/idba_ud " +
+        "--num_threads {threads} 2> {log} >>{log} && " +
+        "python2 select_contigs.py {output.scaf} {output.cont} " + str(MINCONTIGLENGTH)
+
+
+rule sga_preprocess:
+    input:
+        expand(INDIR+"/{sample}{suffix}", sample=SAMPLES, suffix=[SUFFIX1, SUFFIX2])
+    output:
+        OUTDIR+"/sga/preprocessed.fq"
+    shell:
+        SGADIR+"/sga preprocess --pe-mode=1  -o {output} {input}"
+
+rule sga_correct:
+    input:
+        OUTDIR+"/sga/{name}.fq"
+    output:
+        OUTDIR+"/sga/{name, [a-zA-Z]*}.ec.fa"
+        
+    log:
+        OUTDIR+"/sga/logging.txt"
+    params:
+        pref=OUTDIR+"/sga/{name}"
+    shell:
+        SGADIR+"/sga index -a ropebwt -t 20 --prefix={params.pref} --no-reverse {input} && " +
+        SGADIR+"/sga correct -t 20 -k 21 --prefix={params.pref} {input} && " +
+        SGADIR+"/sga index -a ropebwt -t 20 --prefix={params.pref}.ec {output} "
+
+rule sga_filter:
+    input:
+        OUTDIR+"/sga/{preprocessed}.ec.fa"
+    output:
+        OUTDIR+"/sga/{preprocessed}.ec.filter.pass.fa"
+    log:
+        OUTDIR+"/sga/logging.txt"
+    shell:
+        SGADIR+"/sga filter --no-kmer-check -t 20 {input}"
+
+rule sga_overlap:
+    input:
+        OUTDIR+"/sga/{preprocessed}.ec.filter.pass.fa"
+    params:
+        pref=OUTDIR+"/sga/{preprocessed}.ec.filter.pass"
+    output:
+        temp=temp("{params.pref}.asqg.gz"),
+        asqg="{params.pref}_{K}.asqg.gz",
+    shell:
+        SGADIR+"/sga overlap -m {wildcards.K} -t 20 --prefix={params.pref} {input} && " +
+        "mv {output.temp} {output.asqg}"
+        #gunzip -c ${PREFIX}.asqg.gz > ${PREFIX}.asqg
+
+rule sga_contig:
+    input:
+        graph=OUTDIR+"/sga/{preprocessed}.ec.filter.pass_{K}.asqg.gz"
+    output:
+        graph=OUTDIR+"/sga/{preprocessed}.ec.filter.pass_{K}-graph.asqg.gz",
+        result=OUTDIR+"/sga/{preprocessed}.ec.filter.pass_{K}-contigs.fa"
+    params:
+        pref=OUTDIR+"/sga/{preprocessed}.ec.filter.pass_{K}"
+    shell:
+        SGADIR+"/sga assemble -o {params.pref} {input.graph}"
+
+rule sga_finish:
+    input:
+        OUTDIR+"/sga/{preprocessed}.ec.filter.pass_{K}-contigs.fa"
+    output:
+        cont=OUTDIR+"/sga/long_contigs_"+str(MINCONTIGLENGTH)+".fa"
+    shell:
+        "python2 select_contigs.py {output.result} {output.cont} " + str(MINCONTIGLENGTH)
+
+
+# rule sga_scaffold:
+#     input:
+#         graph=OUTDIR+"/sga/{preprocessed}.ec.filter.pass_{K}-graph.asqg.gz",
+#         reads=expand(INDIR+"/{sample}{suffix}", sample=SAMPLES, suffix=[SUFFIX1, SUFFIX2])
+#         contigs=OUTDIR+"/sga/{preprocessed}.ec.filter.pass_{K}-contigs.fa",
+#     output:
+#         scaf=OUTDIR+"/sga/{preprocessed}.ec.filter.pass_{K}.scaffolds.fa",
+#         long=OUTDIR+"/sga/long_scaffolds_"+str(MINCONTIGLENGTH)+".fa",
+#
+#     params:
+#         pref=OUTDIR+"/sga/{preprocessed}.ec.filter.pass_{K}"
+#     shell:
+#         SGADIR+"/sga scaffold -o {params.pref}.scaf --pe={input.reads} {input.contigs} && " +
+#         SGADIR+"/sga scaffold2fasta -o {output.scaf} -a {input.graph} {params.pref}.scaf && " +
+#         "python2 select_contigs.py {output.scaf} {output.long} " + str(MINCONTIGLENGTH)
+
+
+rule summarize:
+    input:
+        expand(OUTDIR+"/{assembly}/summary.txt", \
+            assembly=["velvet_31", "oases", "metavelvet_31", "megahit_results", "idba_ud", "sga"])
+    output:
+        summary=OUTDIR+"/summary.txt"
+    run:
+        for f in input:
+            shell("cat {f} >> {output.summary}")

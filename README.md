@@ -18,22 +18,21 @@ The database for seed-kraken was built based on a collection of sequences from R
 ### Defining differentially expressed genes identified in contigs
 R, package DeSeq2 from Bioconductor:
 
-dds <- DESeq2::DESeqDataSetFromMatrix(countData = countData, colData = coldata, design = ~ condition)    
-dds = DESeq2::estimateSizeFactors( dds ) 
-ddsp <- DESeq2::estimateDispersions( dds, fitType="parametric" )
-ddsp = DESeq2::nbinomWaldTest( ddsp )    
-result <- results(dds)
+>dds <- DESeq2::DESeqDataSetFromMatrix(countData = countData, colData = coldata, design = ~ condition)    
+>dds <- DESeq2::estimateSizeFactors( dds ) 
+>ddsp <- DESeq2::estimateDispersions( dds, fitType="parametric" )
+>ddsp <- DESeq2::nbinomWaldTest( ddsp )    
+>result <- results(dds)
 
 ### Assessing gene expression levels from raw reads 
 
 We run the MetaGeneMark tool with bash commands:
 
-folder_with_MetaGeneMark/mgm/gmhmmp -a -d -m 
-folder_with_MetaGeneMark/mgm/MetaGeneMark_v1.mod input_file.fasta -o output_file_mgm
+>folder_with_MetaGeneMark/mgm/gmhmmp -a -d -m 
+>folder_with_MetaGeneMark/mgm/MetaGeneMark_v1.mod input_file.fasta -o output_file_mgm
 
 Then for the predicted genes we found orthologs using eggNOGmapper with the default settings using a command-line, also because files were too big to be processed with the online tool. The command used was: 
 
-python folder_with_eggNOGmapper/eggnog-mapper-1.0.3/emapper.py -i 
-meta_genemark_predicted_sequences/input_file.faa --output output_file_eggNOG --cpu 10 -m diamond 
+>python folder_with_eggNOGmapper/eggnog-mapper-1.0.3/emapper.py -i meta_genemark_predicted_sequences/input_file.faa --output output_file_eggNOG --cpu 10 -m diamond 
 
 

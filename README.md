@@ -1,7 +1,10 @@
 # metatranscriptomics_in_DS
 ## Metatranscriptomics study of the Down’s Syndrome model mice fed high-fat diet
 
-..... 
+This repository contains the code usd to generate the results of the analysis of the metatranscriptomes data. The data were obtained to determine the microbial gene activity in the faecal microbiome samples from Wild Type and Down Syndrome model mice fed high-fat diet.
+
+Partial result files can be found here: 
+http://regulomics.mimuw.edu.pl/~ilona/metatranscriptomics_in_DS/
 
 ### Quantification of total-RNA sequences
 
